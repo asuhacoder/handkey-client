@@ -1,0 +1,17 @@
+{
+ "name": "handkey-client", "version": "0.1.0", "description": "A typed approval client for the handkey v1 broker",
+ "type": "module", "sideEffects": false, "license": "MIT", "author": "Yudai Kobayashi",
+ "engines": { "node": ">=22" }, "packageManager": "pnpm@11.1.2",
+ "exports": {
+  ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+  "./dom": { "types": "./lib/dom.d.ts", "default": "./lib/dom.js" },
+  "./package.json": "./package.json"
+ },
+ "files": ["lib/", "README.md", "LICENSE"],
+ "scripts": {
+  "build": "tsc -p tsconfig.build.json",
+  "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.root.json",
+  "test": "vitest run", "verify": "pnpm typecheck && pnpm test && pnpm build"
+ },
+ "devDependencies": { "@types/node": "^24.0.0", "typescript": "^5.9.0", "vitest": "^4.0.0" }
+}

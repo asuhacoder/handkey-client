@@ -1,0 +1,6 @@
+{
+ "extends": "./tsconfig.json",
+ "compilerOptions": { "lib": ["ES2022"], "types": ["node"] },
+ "include": ["src/index.ts", "usage-check/node.ts"],
+ "exclude": ["src/dom.ts"]
+}
