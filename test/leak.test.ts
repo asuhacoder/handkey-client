@@ -132,10 +132,22 @@ test('all key-taking routes keep credentials out of every public emission and re
    ...(row.stop === 'session-ended' ? [] : [['GET', '/v1/requests']]),
   ]);
   if (row.stop === 'session-ended') {
-   expect(s.actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: target });
+   const retained = { kind: 'finished', stopped: 'session-ended', items: [
+    { id: one, request: null, step: { kind: 'done', outcome: { kind: 'session-ended', request: null } } },
+    { id: two, request: null, step: { kind: 'done', outcome: { kind: 'not-sent', because: 'batch-stopped' } } },
+   ] };
+   expect(s.actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: target, approval: retained });
    expect(s.persistence.read()).toBeNull();
+   s.fake.queue(json(created('registered', tokens[1]), 201), sse().response);
+   expect(await observe(s.actor.register({ ...target, name: 'Laptop', key: credential() }))).toEqual({ kind: 'registered', persistence: 'saved' });
+   const registered = s.actor.getSnapshot();
+   expect(registered.kind).toBe('active');
+   if (registered.kind !== 'active') throw new Error('Expected registered actor');
+   expect(registered.session.sessionId).toBe('registered');
+   expect(registered.approval).toEqual(retained);
   }
   s.actor.dismissApproval();
+  expect(s.actor.getSnapshot().approval).toBeNull();
   await s.finish();
  }
 

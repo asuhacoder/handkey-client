@@ -38,9 +38,9 @@ describe('review regressions', () => {
   persistence.compareAndSwap(null, 'not a session record');
   const { environment } = routed(() => undefined);
   const actor = createHandkey({ environment, persistence });
-  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'invalid-saved-session', remembered: null });
+  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'invalid-saved-session', remembered: null, approval: null });
   const unsubscribe = actor.subscribe(() => {});
-  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'invalid-saved-session', remembered: null });
+  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'invalid-saved-session', remembered: null, approval: null });
   unsubscribe();
  });
 
@@ -55,7 +55,7 @@ describe('review regressions', () => {
   const first = actor.subscribe(() => {});
   await flush();
   await actor.signOut();
-  const signedOut = { kind: 'register', reason: 'signed-out', remembered: { brokerUrl: URL_BASE, deviceId: 'device' } };
+  const signedOut = { kind: 'register', reason: 'signed-out', remembered: { brokerUrl: URL_BASE, deviceId: 'device' }, approval: null };
   expect(actor.getSnapshot()).toEqual(signedOut);
   first();
   const second = actor.subscribe(() => {});

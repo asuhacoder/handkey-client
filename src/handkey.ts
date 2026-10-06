@@ -40,6 +40,7 @@ export type Snapshot = {
  readonly kind: 'register';
  readonly reason: 'never-registered' | 'expired' | 'rejected' | 'signed-out' | 'invalid-saved-session';
  readonly remembered: { readonly brokerUrl: string; readonly deviceId: string } | null;
+ readonly approval: ApprovalRun | null;
 } | {
  readonly kind: 'active';
  readonly session: { readonly brokerUrl: string; readonly deviceId: string; readonly sessionId: SessionId; readonly viewUntil: Instant };
@@ -89,7 +90,8 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  let encoded: string | null = null;
  let restored = false;
  let epoch = 0;
- let snapshot: Snapshot = { kind: 'register', reason: 'never-registered', remembered: null };
+ let snapshot: Snapshot = { kind: 'register', reason: 'never-registered', remembered: null, approval: null };
+ let approvalGeneration = 0;
  const listeners = new Set<() => void>();
  const timers = new Set<unknown>();
  let stream: AbortController | null = null;
@@ -144,10 +146,12 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  function end(reason: Extract<Snapshot, {kind:'register'}>['reason'], captured: number): void {
   if (!current(captured)) return;
   const remembered = record === null ? null : { brokerUrl: record.brokerUrl, deviceId: record.deviceId };
+  const approval = reason === 'signed-out' ? null : snapshot.approval;
+  if (reason === 'signed-out') ++approvalGeneration;
   ++epoch; stopFeed(); record = null; dirty = false; flight = null;
   const result = swap(null);
   if (result === 'superseded') { restore(); return; }
-  publish({ kind: 'register', reason, remembered });
+  publish({ kind: 'register', reason, remembered, approval });
  }
  function armLocal(): void {
   clear(deadlineTimer); clear(expiryTimer);
@@ -165,7 +169,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   ++epoch; stopFeed(); record = next; flight = null; dirty = false; attempt = 0; connectedBefore = false; decidedIds.clear();
   if (next.viewUntil <= environment.now()) { end('expired', epoch); return; }
   publish({ kind: 'active', session: { brokerUrl: next.brokerUrl, deviceId: next.deviceId, sessionId: next.sessionId, viewUntil: next.viewUntil },
-   pending: [], unreadable: 0, list: {kind:'loading'}, connection:'connecting', approval:null });
+   pending: [], unreadable: 0, list: {kind:'loading'}, connection:'connecting', approval:snapshot.approval });
   if (start && listeners.size > 0) { armLocal(); connect(); }
  }
  function restore(): void {
@@ -177,13 +181,13 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   if (saved === null) {
    const remembered = record === null ? null : { brokerUrl: record.brokerUrl, deviceId: record.deviceId };
    ++epoch; stopFeed(); record = null; flight = null; dirty = false;
-   publish({kind:'register',reason: remembered === null ? 'never-registered' : 'signed-out',remembered});
+   publish({kind:'register',reason: remembered === null ? 'never-registered' : 'signed-out',remembered,approval:snapshot.approval});
    return;
   }
   const parsed = parseSavedSession(saved);
   if (parsed.kind === 'protocol') {
    ++epoch; stopFeed(); record = null; swap(null);
-   publish({kind:'register',reason:'invalid-saved-session',remembered:null});
+   publish({kind:'register',reason:'invalid-saved-session',remembered:null,approval:snapshot.approval});
    return;
   }
   adopt(parsed.value);
@@ -414,6 +418,8 @@ export function createHandkey(options: { persistence?: Persistence; environment?
    } finally {bytes.fill(0);}
   },
   async signOut() {
+   ++approvalGeneration;
+   publish({...snapshot,approval:null});
    const session = record; if (session === null) return;
    const captured = epoch;
    await broker.revoke({session,id:session.sessionId});
@@ -429,8 +435,9 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     if (ids.length === 0) return {kind:'empty'};
     batchBusy = true; ownsBatch = true;
     const captured = epoch;
+    const generation = ++approvalGeneration;
     let run = startRun(ids.map(id=>({id,request:snapshot.kind === 'active' ? snapshot.pending.find(request=>request.id === id) ?? null : null})));
-    const emit = (): void => {if(current(captured) && snapshot.kind === 'active') publish({...snapshot,approval:run});};
+    const emit = (): void => {if(generation === approvalGeneration) publish({...snapshot,approval:run});};
     const step = (id:RequestId,value:ApprovalStep):void => {run=withStep({run,id,step:value});emit();};
     emit();
     for (const item of run.items) {
@@ -474,7 +481,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      return report;
    } finally {bytes.fill(0);if (ownsBatch) batchBusy=false;}
   },
-  dismissApproval() {if(snapshot.kind === 'active' && snapshot.approval?.kind === 'finished') publish({...snapshot,approval:null});},
+  dismissApproval() {if(snapshot.approval?.kind === 'finished') { ++approvalGeneration; publish({...snapshot,approval:null}); }},
   async deny(ids) {
    const session=record;if(session===null)return {kind:'not-registered'};
    const captured=epoch;

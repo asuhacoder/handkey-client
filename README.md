@@ -25,6 +25,12 @@ const client = createHandkey(browserEnvironment({ storageKey: 'handkey.session' 
 export function useHandkey() {
  return useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
 }
+export function approvalProgress() {
+ return client.getSnapshot().approval;
+}
+export function dismissApproval() {
+ client.dismissApproval();
+}
 export function pendingSeconds(now = Date.now()) {
  const snapshot = client.getSnapshot();
  return snapshot.kind === 'active' ? snapshot.pending.map(request => remaining(request.deadline, now)) : [];
@@ -71,7 +77,7 @@ Memory persistence is isolated per instance. A custom `Persistence` stores an op
 
 ## Requests and snapshots
 
-The snapshot is either `register` or `active`. The registration snapshot has a closed reason and optional remembered broker URL and device ID. The active snapshot has the session identity, pending requests, unreadable entry count, list freshness, connection status, and current approval progress.
+The snapshot is either `register` or `active`. Both variants have `approval: ApprovalRun | null`. The registration snapshot has a closed reason and optional remembered broker URL and device ID. The active snapshot also has the session identity, pending requests, unreadable entry count, list freshness, and connection status.
 
 `remaining(deadline, now)` accepts epoch milliseconds for `now`, including `Date.now()`. It returns whole nonnegative seconds and returns zero for a non-finite clock.
 
@@ -83,7 +89,7 @@ Agent names, reasons, command entries, directories, item names, and session name
 
 ## Approval outcomes
 
-A batch sends approvals sequentially. It never retries a POST automatically. The approval timeout is 150 seconds. Each item moves through `queued`, `approving`, `confirming`, and `done`; a 404 skips confirmation. Progress stays in `snapshot.approval` until `dismissApproval`. Dismissal does nothing while a run is active.
+A batch sends approvals sequentially. It never retries a POST automatically. The approval timeout is 150 seconds. Each item moves through `queued`, `approving`, `confirming`, and `done`; a 404 skips confirmation. Progress stays in `snapshot.approval` through session loss and re-registration until `dismissApproval()`. Dismissal works in both snapshot variants and does nothing while a run is running. A new approval batch replaces a finished run. `signOut()` clears it.
 
 | Approve response | Confirmation | Item outcome | Batch |
 | --- | --- | --- | --- |

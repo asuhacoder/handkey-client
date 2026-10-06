@@ -8,6 +8,12 @@ const client = createHandkey(browserEnvironment({ storageKey: 'handkey.session' 
 export function useHandkey() {
  return useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
 }
+export function approvalProgress() {
+ return client.getSnapshot().approval;
+}
+export function dismissApproval() {
+ client.dismissApproval();
+}
 export function pendingSeconds(now = Date.now()) {
  const snapshot = client.getSnapshot();
  return snapshot.kind === 'active' ? snapshot.pending.map(request => remaining(request.deadline, now)) : [];

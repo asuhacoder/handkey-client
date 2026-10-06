@@ -65,7 +65,12 @@ describe('approval broker status policy through the actor', () => {
   expect(JSON.stringify([report, actor.getSnapshot(), persistence.read()])).not.toContain(KEY);
   expect(JSON.stringify([report, actor.getSnapshot()])).not.toContain(TOKEN);
   if (row.stop === 'session-ended') {
-   expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: { brokerUrl: URL_BASE, deviceId: 'device' } });
+   expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: { brokerUrl: URL_BASE, deviceId: 'device' }, approval: {
+    kind: 'finished', stopped: 'session-ended', items: [
+     { id: first, request: null, step: { kind: 'done', outcome: { kind: 'session-ended', request: null } } },
+     { id: second, request: null, step: { kind: 'done', outcome: { kind: 'not-sent', because: 'batch-stopped' } } },
+    ],
+   } });
    expect(persistence.read()).toBeNull();
   }
  });
@@ -105,7 +110,7 @@ describe('approval broker status policy through the actor', () => {
 describe('credential ownership and registration', () => {
  it('has stable credential-free initial snapshots and no eager effects', () => {
   const fake = fakeEnvironment(), actor = createHandkey({ environment: fake.environment });
-  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'never-registered', remembered: null });
+  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'never-registered', remembered: null, approval: null });
   expect(actor.getSnapshot()).toBe(actor.getSnapshot());
   expect(fake.calls).toEqual([]);
   expect(fake.timers.size).toBe(0);
@@ -181,7 +186,7 @@ describe('view and key-only routes', () => {
   expect(await actor.deny([request().id])).toEqual({ kind: 'finished', items: [{ id: 'r1', outcome: { kind: 'denied' } }], stopped: null });
   expect(await actor.revokeSibling(sessionId(), key())).toEqual({ kind: 'ok' });
   await actor.signOut();
-  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'signed-out', remembered: { brokerUrl: URL_BASE, deviceId: 'device' } });
+  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'signed-out', remembered: { brokerUrl: URL_BASE, deviceId: 'device' }, approval: null });
   expect(persistence.read()).toBeNull();
   expect(fake.calls.map(call => [call.method, new URL(call.url).pathname, call.body, call.headers.get('Content-Type')])).toEqual([
    ['GET', '/v1/devices/device/sessions', undefined, null], ['GET', '/v1/requests/r1', undefined, null],
@@ -234,7 +239,7 @@ describe('view and key-only routes', () => {
   if (method === 'inspect') expect(await actor.inspect(request().id)).toEqual({ kind: 'session-ended' });
   else if (method === 'sessions') expect(await actor.sessions()).toEqual({ kind: 'session-ended' });
   else await actor.refresh();
-  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: { brokerUrl: URL_BASE, deviceId: 'device' } });
+  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: { brokerUrl: URL_BASE, deviceId: 'device' }, approval: null });
   expect(persistence.read()).toBeNull();
  });
  it.each([{ status: 200, outcome: 'denied', stop: null }, { status: 409, outcome: 'already-decided', stop: null }, { status: 401, outcome: 'session-ended', stop: 'session-ended' }, { status: 404, outcome: 'not-found', stop: 'not-found' }, { status: 503, outcome: 'interrupted', stop: 'interrupted' }])('deny $status is sequential and applies stop semantics', async row => {
@@ -346,10 +351,10 @@ describe('actor epochs, persistence and deadlines', () => {
   expect(saved).toContain(TOKEN);
   const next = JSON.stringify({ version: 1, brokerUrl: URL_BASE, deviceId: 'device', sessionId: 'short', viewToken: TOKEN, viewUntil: NOW + 1000 });
   fake.queue(sse().response); persistence.compareAndSwap(saved, next); await flush(); await fake.advance(1000);
-  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'expired', remembered: { brokerUrl: URL_BASE, deviceId: 'device' } });
+  expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'expired', remembered: { brokerUrl: URL_BASE, deviceId: 'device' }, approval: null });
   off();
   persistence.compareAndSwap(null, '{invalid');
-  expect(createHandkey({ environment: fake.environment, persistence }).getSnapshot()).toEqual({ kind: 'register', reason: 'invalid-saved-session', remembered: null });
+  expect(createHandkey({ environment: fake.environment, persistence }).getSnapshot()).toEqual({ kind: 'register', reason: 'invalid-saved-session', remembered: null, approval: null });
   expect(persistence.read()).toBeNull();
  });
 });
