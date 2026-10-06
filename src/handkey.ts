@@ -107,6 +107,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  let flight: Promise<void> | null = null;
  let dirty = false;
  let batchBusy = false;
+ let stopApproval: (()=>void) | null = null;
  let registering = false;
  let attempt = 0;
  let connectedBefore = false;
@@ -147,8 +148,8 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  function end(reason: Extract<Snapshot, {kind:'register'}>['reason'], captured: number): void {
   if (!current(captured)) return;
   const remembered = record === null ? null : { brokerUrl: record.brokerUrl, deviceId: record.deviceId };
-  const approval = reason === 'signed-out' ? null : snapshot.approval;
-  if (reason === 'signed-out') ++approvalGeneration;
+  stopApproval?.();
+  const approval = snapshot.approval;
   ++epoch; stopFeed(); record = null; dirty = false; flight = null;
   const result = swap(null);
   if (result === 'superseded') { restore(); return; }
@@ -427,8 +428,8 @@ export function createHandkey(options: { persistence?: Persistence; environment?
    } finally {bytes.fill(0);}
   },
   async signOut() {
-   ++approvalGeneration;
-   publish({...snapshot,approval:null});
+   if (stopApproval !== null) stopApproval();
+   else { ++approvalGeneration; publish({...snapshot,approval:null}); }
    const session = record; if (session === null) return;
    const captured = epoch;
    await broker.revoke({session,id:session.sessionId});
@@ -448,11 +449,17 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     let run = startRun(ids.map(id=>({id,request:snapshot.kind === 'active' ? snapshot.pending.find(request=>request.id === id) ?? null : null})));
     const emit = (): void => {if(generation === approvalGeneration) publish({...snapshot,approval:run});};
     const step = (id:RequestId,value:ApprovalStep):void => {run=withStep({run,id,step:value});emit();};
+    const cancelled=():boolean=>run.stopped==='session-ended';
+    stopApproval=()=>{bytes.fill(0);run=stopRun(run,'session-ended');};
     emit();
     for (const item of run.items) {
      if (item.step.kind === 'done') continue;
-     if (!current(captured)) {run=stopRun(run,'session-ended');break;}
+     if (!current(captured) || cancelled()) {run=stopRun(run,'session-ended');emit();break;}
      step(item.id,{kind:'approving',since:toInstant(environment.now())});
+     if (!current(captured) || cancelled()) {
+      step(item.id,{kind:'done',outcome:{kind:'not-sent',because:'batch-stopped'}});
+      run=stopRun(run,'session-ended');emit();break;
+     }
      const reply = await broker.approve({session,id:item.id,bytes});
      const next = afterApprove(reply);
      let stop: StopReason | null = null;
@@ -475,7 +482,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
       default: {const unreachable:never=next; throw new Error('Unreachable approval transition');}
      }
      step(item.id,{kind:'done',outcome});
-     if (!current(captured)) stop='session-ended';
+     if (!current(captured) || cancelled()) stop='session-ended';
      if (stop !== null) {run=stopRun(run,stop);emit();break;}
     }
     const report = reportOf(run);
@@ -488,7 +495,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
       }
      }).map(item=>item.id)});
      return report;
-   } finally {bytes.fill(0);if (ownsBatch) batchBusy=false;}
+   } finally {bytes.fill(0);if (ownsBatch) {batchBusy=false;stopApproval=null;}}
   },
   dismissApproval() {if(snapshot.approval?.kind === 'finished') { ++approvalGeneration; publish({...snapshot,approval:null}); }},
   async deny(ids) {

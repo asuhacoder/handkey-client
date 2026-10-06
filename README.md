@@ -89,7 +89,7 @@ Agent names, reasons, command entries, directories, item names, and session name
 
 ## Approval outcomes
 
-A batch sends approvals sequentially. It never retries a POST automatically. The approval timeout is 150 seconds. Each item moves through `queued`, `approving`, `confirming`, and `done`; a 404 skips confirmation. Progress stays in `snapshot.approval` through session loss and re-registration until `dismissApproval()`. Dismissal works in both snapshot variants and does nothing while a run is running. A new approval batch replaces a finished run. `signOut()` clears it.
+A batch sends approvals sequentially. It never retries a POST automatically. The approval timeout is 150 seconds. Each item moves through `queued`, `approving`, `confirming`, and `done`; a 404 skips confirmation. Progress stays in `snapshot.approval` through session loss and re-registration until `dismissApproval()`. Dismissal works in both snapshot variants and does nothing while a run is running. A new approval batch replaces a finished run. `signOut()` clears a finished run. During a running batch, sign-out stops further key-bearing requests and zeroes the claimed key immediately. An already-sent item completes its confirming read. The cancelled run stays in the registration snapshot with `stopped: 'session-ended'` until dismissed.
 
 | Approve response | Confirmation | Item outcome | Batch |
 | --- | --- | --- | --- |

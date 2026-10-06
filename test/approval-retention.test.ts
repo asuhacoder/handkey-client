@@ -31,7 +31,7 @@ test('dismiss clears register-state approval and signOut clears retained progres
  fake.queue(json({status:'revoked'}));await actor.signOut();
  expect(actor.getSnapshot()).toMatchObject({kind:'register',reason:'signed-out',approval:null});
 });
-test('a running retained approval cannot be dismissed or resurrected after signOut',async()=>{
+test('a running approval stays undismissable and retains its settlement after signOut',async()=>{
  const fake=fakeEnvironment();const actor=createHandkey({environment:fake.environment,persistence:savedPersistence()});
  fake.queue(json([wireRequest('one'),wireRequest('two')]));await actor.refresh();
  const held=deferred<Response>();fake.queue(()=>held.promise);
@@ -39,5 +39,5 @@ test('a running retained approval cannot be dismissed or resurrected after signO
  actor.dismissApproval();expect(actor.getSnapshot()).toMatchObject({kind:'active',approval:{kind:'running'}});
  fake.queue(json({status:'revoked'}));await actor.signOut();
  fake.queue(json({},401));held.resolve(json({status:'processed'}));await operation;await flush();
- expect(actor.getSnapshot()).toMatchObject({kind:'register',reason:'signed-out',approval:null});
+ expect(actor.getSnapshot()).toMatchObject({kind:'register',reason:'signed-out',approval:{kind:'finished',stopped:'session-ended',items:[{id:'one',step:{kind:'done',outcome:{kind:'outcome-unknown'}}},{id:'two',step:{kind:'done',outcome:{kind:'not-sent'}}}]}});
 });
