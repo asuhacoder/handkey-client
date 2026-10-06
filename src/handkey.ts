@@ -242,10 +242,12 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   if (record === null || listeners.size === 0 || stream !== null) return;
   const session = record; const captured = epoch;
   const controller = new AbortController(); stream = controller;
+  let liveSince: number | null = null;
   if (connectedBefore) void refresh();
   connectedBefore = true;
   heartbeatTimer = schedule(() => { controller.abort(); },25_000);
   const activity = (): void => {
+   if (liveSince !== null && environment.now() - liveSince >= 30_000) attempt = 0;
    clear(heartbeatTimer);
    heartbeatTimer = schedule(() => { controller.abort(); },25_000);
   };
@@ -260,7 +262,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     activity();
     switch (kind) {
      case 'sync':
-      attempt = 0; clear(pollTimer); pollTimer = null;
+      liveSince ??= environment.now(); clear(pollTimer); pollTimer = null;
       if (snapshot.kind === 'active') publish({...snapshot,connection:'live'});
       void refresh(); break;
      case 'change': void refresh(); break;
