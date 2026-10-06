@@ -270,13 +270,13 @@ describe('actor epochs, persistence and deadlines', () => {
    read: () => stored,
    compareAndSwap() { stored = newer; return false; },
   } });
-  fake.queue(json(created('losing-registration', 'losing-view-token'), 201), json({ status: 'revoked' }), json({status:'revoked'}));
+  fake.queue(json(created('losing-registration', 'losing-view-token'), 201), json({ status: 'revoked' }));
   expect(await actor.register(registration())).toEqual({ kind: 'registered', persistence: 'superseded' });
   expect(active(actor).session.sessionId).toBe('newer');
   expect(stored).toBe(newer);
   expect(JSON.stringify(actor.getSnapshot())).not.toContain('newer-view-token');
   expect(JSON.stringify(actor.getSnapshot())).not.toContain('losing-view-token');
-  expect(fake.calls.map(call => new URL(call.url).pathname)).toEqual(['/v1/devices/device/sessions', '/v1/sessions/session/revoke', '/v1/sessions/losing-registration/revoke']);
+  expect(fake.calls.map(call => new URL(call.url).pathname)).toEqual(['/v1/devices/device/sessions', '/v1/sessions/losing-registration/revoke']);
  });
  it('reports failed persistence without leaking the credential or throwing storage diagnostics', async () => {
   const fake = fakeEnvironment();

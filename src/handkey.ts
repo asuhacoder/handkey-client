@@ -345,31 +345,35 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     if (target.kind !== 'ok') return target;
     if ([...input.name].length > 128 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(input.name)) return {kind:'invalid-name'};
     registering = true; ownsRegistration = true;
-    const captured = epoch;
+    const startedFrom = encoded;
+    const previous = record;
     const reply = await broker.createSession({brokerUrl:target.brokerUrl,deviceId:input.deviceId,name:input.name,bytes});
-    if (captured !== epoch) {
-     if (reply.kind === 'ok') await broker.revoke({session:reply.value,id:reply.value.sessionId});
-     return {kind:'failed',fault:{kind:'storage'}};
-    }
     switch(reply.kind) {
      case 'unauthorized': return {kind:'rejected'};
      case 'conflict': return {kind:'session-limit'};
      case 'not-found': return {kind:'failed',fault:{kind:'protocol'}};
      case 'failed': return reply;
      case 'ok': {
-      const previous = record;
-      adopt(reply.value, false);
-      const replacementEpoch = epoch;
-      if (previous !== null) await broker.revoke({session:previous,id:previous.sessionId});
-      if (!current(replacementEpoch)) {
+      let stored: string | null;
+      try {stored=persistence.read();} catch {
        await broker.revoke({session:reply.value,id:reply.value.sessionId});
        return {kind:'failed',fault:{kind:'storage'}};
       }
+      if(stored!==null && stored!==startedFrom) {
+       restore();await broker.revoke({session:reply.value,id:reply.value.sessionId});
+       return {kind:'registered',persistence:'superseded'};
+      }
+      encoded=stored;
       const saved = swap(encodeSavedSession(reply.value));
       if (saved === 'superseded') {
        restore();
        await broker.revoke({session:reply.value,id:reply.value.sessionId});
-      } else if (listeners.size > 0) { armLocal(); connect(); }
+      } else {
+       adopt(reply.value,false);
+       const replacementEpoch=epoch;
+       if(previous!==null && stored!==null) await broker.revoke({session:previous,id:previous.sessionId});
+       if(current(replacementEpoch) && listeners.size>0){armLocal();connect();}
+      }
       return {kind:'registered',persistence:saved};
      }
      default: {const unreachable:never=reply; return unreachable;}
