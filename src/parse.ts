@@ -99,6 +99,13 @@ export function parseRequest(value: unknown): Parsed<Request> {
   if (!isRecord(value) || !isRecord(value.spec)) return { kind: 'protocol' };
   const id = requestId(value.id), createdAt = instant(value.created_at), deadline = instant(value.deadline), spec = value.spec;
   if (!id || createdAt === null || deadline === null || typeof spec.method !== 'string' || !spec.method) return { kind: 'protocol' };
+  for (const field of ['ttl_seconds','uses']) {
+    const number=spec[field];
+    if(number!==undefined && (typeof number!=='number' || !Number.isSafeInteger(number) || number<0)) return {kind:'protocol'};
+  }
+  if(spec.unredacted!==undefined && typeof spec.unredacted!=='boolean') return {kind:'protocol'};
+  if(spec.command!==undefined && spec.command!==null && (!Array.isArray(spec.command) || spec.command.some((entry:unknown)=>typeof entry!=='string'))) return {kind:'protocol'};
+  if(spec.bindings!==undefined && spec.bindings!==null && (!isRecord(spec.bindings) || Object.values(spec.bindings).some(entry=>typeof entry!=='string'))) return {kind:'protocol'};
   const displayRefs = isRecord(value.display) && Array.isArray(value.display.refs) ? value.display.refs : [];
   const secrets: SecretRef[] = [];
   if (spec.refs !== undefined && !Array.isArray(spec.refs)) return { kind: 'protocol' };
