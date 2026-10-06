@@ -12,11 +12,12 @@ function text(value: unknown): string { return typeof value === 'string' ? value
 function optionalText(value: unknown): string | null { return text(value) || null; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((entry: unknown): entry is string => typeof entry === 'string') : []; }
 function integer(value: unknown, fallback: number): number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : fallback; }
-function requestId(value: unknown): RequestId | null { return typeof value === 'string' && value.length > 0 ? value as RequestId : null; }
-function sessionId(value: unknown): SessionId | null { return typeof value === 'string' && value.length > 0 ? value as SessionId : null; }
+function branded<T extends RequestId | SessionId | Instant>(value: string | number): T { return value as T; }
+function requestId(value: unknown): RequestId | null { return typeof value === 'string' && value.length > 0 ? branded<RequestId>(value) : null; }
+function sessionId(value: unknown): SessionId | null { return typeof value === 'string' && value.length > 0 ? branded<SessionId>(value) : null; }
 export function toInstant(value: number): Instant {
   if (!Number.isFinite(value) || Math.abs(value) > 8640000000000000) throw new RangeError('Invalid instant');
-  return value as Instant;
+  return branded<Instant>(value);
 }
 export function instant(value: unknown): Instant | null {
   if (typeof value !== 'string' || value === '0001-01-01T00:00:00Z') return null;
