@@ -35,7 +35,7 @@ export type DenyOutcome = { readonly kind: 'denied' } | { readonly kind: 'alread
  | { readonly kind: 'session-ended' } | { readonly kind: 'not-found' }
  | { readonly kind: 'interrupted' } | { readonly kind: 'not-sent' };
 export type DenyReport = { readonly kind: 'finished'; readonly items: readonly { readonly id: RequestId; readonly outcome: DenyOutcome }[];
- readonly stopped: 'session-ended' | 'not-found' | 'interrupted' | null } | { readonly kind: 'not-registered' };
+ readonly stopped: 'session-ended' | 'not-found' | 'interrupted' | null } | { readonly kind: 'not-registered' } | {readonly kind:'busy'};
 export type Snapshot = {
  readonly kind: 'register';
  readonly reason: 'never-registered' | 'expired' | 'rejected' | 'signed-out' | 'invalid-saved-session';
@@ -507,6 +507,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   },
   dismissApproval() {if(snapshot.approval?.kind === 'finished') { ++approvalGeneration; publish({...snapshot,approval:null}); }},
   async deny(ids) {
+   if(batchBusy) return {kind:'busy'};
    const session=record;if(session===null)return {kind:'not-registered'};
    const captured=epoch;
    const items: {id:RequestId;outcome:DenyOutcome}[]=[];

@@ -103,7 +103,7 @@ Later items are `not-sent` after a stop. Duplicate IDs send once. Unrecognized m
 
 Finished approval and deny batches immediately remove requests known to be decided from `pending`, then trigger the same coalesced re-list as `refresh()`. Interrupted, key-rejected, authentication-undetermined, and not-sent requests stay pending unless the new list says otherwise. Reports resolve without waiting for the re-list. Session-ended batches do not re-list.
 
-Deny uses only the view token and sends no body. It continues on 200 and 409, and stops on 401, 404, or other failure. A 401 on list, read, deny, events, or a confirming read clears the session and returns to registration. A 401 on the approve request itself does not clear it. The confirming read decides between a rejected key and an ended session. Key-only session list and revoke work without a registered view session. `revokeSibling` disambiguates a key-bearing 401 with a view-only session read.
+Deny returns `busy` without HTTP calls while an approval batch is running. Otherwise it uses only the view token and sends no body. It continues on 200 and 409, and stops on 401, 404, or other failure. A 401 on list, read, deny, events, or a confirming read clears the session and returns to registration. A 401 on the approve request itself does not clear it. The confirming read decides between a rejected key and an ended session. Key-only session list and revoke work without a registered view session. `revokeSibling` disambiguates a key-bearing 401 with a view-only session read.
 
 ## Key handling
 
