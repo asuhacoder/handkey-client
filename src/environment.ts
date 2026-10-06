@@ -40,8 +40,16 @@ export function defaultEnvironment(): Environment {
   random: Math.random,
   setTimeout(callback, milliseconds) {
    const handle = {};
-   const timer = globalThis.setTimeout(() => { timers.delete(handle); callback(); }, milliseconds);
-   timers.set(handle, timer);
+   const deadline = Date.now() + milliseconds;
+   const arm = (): void => {
+    const left = deadline - Date.now();
+    const timer = globalThis.setTimeout(() => {
+     if (deadline > Date.now()) arm();
+     else { timers.delete(handle); callback(); }
+    }, Math.max(0, Math.min(2_147_483_647, left)));
+    timers.set(handle, timer);
+   };
+   arm();
    return handle;
   },
   clearTimeout(handle) {
