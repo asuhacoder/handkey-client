@@ -1,3 +1,10 @@
-export const BROKER_API = 'v1';
+export { BROKER_API, createHandkey } from './handkey.js';
+export type { Handkey, Snapshot, ReadResult, RegisterResult, KeySessionsResult, KeyRevokeResult, RevokeResult, DenyReport, DenyOutcome } from './handkey.js';
 export { consumeDeviceKey } from './key.js';
 export type { DeviceKey } from './key.js';
+export { remaining } from './request.js';
+export type { Request, RequestId, SessionId, Instant, SessionSummary, SecretRef, SecretName, Binding, TypeTarget, ItemField, Operation, Lease, Caution, Approval, Execution, CreatedItem } from './request.js';
+export type { ApprovalOutcome, ApprovalStep, ApprovalItem, ApprovalRun, ApprovalReport, StopReason } from './approval.js';
+export { memoryPersistence } from './environment.js';
+export type { Environment, Persistence } from './environment.js';
+export type { Fault } from './broker.js';
