@@ -87,6 +87,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  const broker = createBroker(environment);
  let record: SessionRecord | null = null;
  let encoded: string | null = null;
+ let restored = false;
  let epoch = 0;
  let snapshot: Snapshot = { kind: 'register', reason: 'never-registered', remembered: null };
  const listeners = new Set<() => void>();
@@ -124,7 +125,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  }
  function stopFeed(): void {
   stream?.abort(); stream = null;
-  listAbort?.abort(); listAbort = null;
+  listAbort?.abort(); listAbort = null; flight = null; dirty = false;
   for (const handle of timers) environment.clearTimeout(handle);
   timers.clear();
   retryTimer = pollTimer = heartbeatTimer = deadlineTimer = expiryTimer = null;
@@ -159,17 +160,18 @@ export function createHandkey(options: { persistence?: Persistence; environment?
    armLocal();
   }, first.deadline - environment.now());
  }
- function adopt(next: SessionRecord): void {
+ function adopt(next: SessionRecord, start = true): void {
   ++epoch; stopFeed(); record = next; flight = null; dirty = false; attempt = 0; connectedBefore = false;
   if (next.viewUntil <= environment.now()) { end('expired', epoch); return; }
   publish({ kind: 'active', session: { brokerUrl: next.brokerUrl, deviceId: next.deviceId, sessionId: next.sessionId, viewUntil: next.viewUntil },
    pending: [], unreadable: 0, list: {kind:'loading'}, connection:'connecting', approval:null });
-  if (listeners.size > 0) { armLocal(); connect(); }
+  if (start && listeners.size > 0) { armLocal(); connect(); }
  }
  function restore(): void {
   let saved: string | null;
   try { saved = persistence.read(); } catch { saved = null; }
-  if (saved === encoded && record !== null) return;
+  if (restored && saved === encoded) return;
+  restored = true;
   encoded = saved;
   if (saved === null) {
    const remembered = record === null ? null : { brokerUrl: record.brokerUrl, deviceId: record.deviceId };
@@ -220,8 +222,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
    } while (dirty && current(captured));
   };
   flight = run().finally(() => {
-   if (captured === epoch) flight = null;
-   if (listAbort === controller) listAbort = null;
+   if (listAbort === controller) { listAbort = null; flight = null; }
   });
   return flight;
  }
@@ -274,7 +275,8 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   });
  }
  const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener);
+  const subscription = (): void => { listener(); };
+  listeners.add(subscription);
   if (listeners.size === 1) {
    unsubscribeStorage = persistence.subscribe?.(() => { if (!suppressStorage) restore(); }) ?? null;
    unsubscribeVisibility = environment.visibility?.subscribe(() => {
@@ -285,7 +287,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   let subscribed = true;
   return () => {
    if (!subscribed) return;
-   subscribed = false; listeners.delete(listener);
+   subscribed = false; listeners.delete(subscription);
    if (listeners.size === 0) { stopFeed(); unsubscribeStorage?.(); unsubscribeStorage = null; unsubscribeVisibility?.(); unsubscribeVisibility = null; }
   };
  };
@@ -319,7 +321,10 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     registering = true; ownsRegistration = true;
     const captured = epoch;
     const reply = await broker.createSession({brokerUrl:target.brokerUrl,deviceId:input.deviceId,name:input.name,bytes});
-    if (captured !== epoch) return {kind:'failed',fault:{kind:'storage'}};
+    if (captured !== epoch) {
+     if (reply.kind === 'ok') await broker.revoke({session:reply.value,id:reply.value.sessionId});
+     return {kind:'failed',fault:{kind:'storage'}};
+    }
     switch(reply.kind) {
      case 'unauthorized': return {kind:'rejected'};
      case 'conflict': return {kind:'session-limit'};
@@ -327,10 +332,18 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      case 'failed': return reply;
      case 'ok': {
       const previous = record;
+      adopt(reply.value, false);
+      const replacementEpoch = epoch;
       if (previous !== null) await broker.revoke({session:previous,id:previous.sessionId});
-      if (captured !== epoch) return {kind:'failed',fault:{kind:'storage'}};
+      if (!current(replacementEpoch)) {
+       await broker.revoke({session:reply.value,id:reply.value.sessionId});
+       return {kind:'failed',fault:{kind:'storage'}};
+      }
       const saved = swap(encodeSavedSession(reply.value));
-      if (saved === 'superseded') restore(); else adopt(reply.value);
+      if (saved === 'superseded') {
+       restore();
+       await broker.revoke({session:reply.value,id:reply.value.sessionId});
+      } else if (listeners.size > 0) { armLocal(); connect(); }
       return {kind:'registered',persistence:saved};
      }
      default: {const unreachable:never=reply; return unreachable;}
@@ -399,7 +412,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
    if (bytes === null) return {kind:'key-spent'};
    let ownsBatch = false;
    try {
-    if (batchBusy) return {kind:'busy'};
+    if (batchBusy || registering) return {kind:'busy'};
     const session = record; if (session === null || snapshot.kind !== 'active') return {kind:'not-registered'};
     if (ids.length === 0) return {kind:'empty'};
     batchBusy = true; ownsBatch = true;
