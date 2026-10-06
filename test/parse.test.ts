@@ -148,7 +148,10 @@ describe('sessions, broker URLs and saved records', () => {
     ])).toEqual({ kind: 'ok', value: [{ sessionId: 'b', name: '<phone>', createdAt: 1704067200000, viewUntil: 1704067260000, current: false }, { sessionId: 'a', name: '', createdAt: 1704067210000, viewUntil: 1704067320000, current: true }] });
     expect(parseSessionList({ sessions: [] })).toEqual({ kind: 'protocol' });
   });
-  it.each([['https://BROKER.example:443/', 'https://broker.example'], ['http://localhost:8080/', 'http://localhost:8080'], ['https://[::1]:8443', 'https://[::1]:8443']])('normalizes %s', (input, expected) => { expect(normalizeBrokerUrl(input)).toBe(expected); });
+  it.each(['http://broker.example', 'http://192.168.1.10:8443', 'http://localhost:8080', 'http://127.0.0.1.example.com', 'http://0.0.0.0:8443', 'http://[::ffff:10.0.0.1]:8443'])('refuses plaintext to non-loopback %s', input => {
+    expect(normalizeBrokerUrl(input)).toBeNull();
+  });
+  it.each([['https://BROKER.example:443/', 'https://broker.example'], ['http://127.0.0.1:8080/', 'http://127.0.0.1:8080'], ['http://127.1:9/', 'http://127.0.0.1:9'], ['http://[::1]:8080', 'http://[::1]:8080'], ['https://[::1]:8443', 'https://[::1]:8443']])('normalizes %s', (input, expected) => { expect(normalizeBrokerUrl(input)).toBe(expected); });
   it.each(['ftp://broker.example', 'https://user:pass@broker.example', 'https://user@broker.example', 'https://broker.example/v1', 'https://broker.example/?q=x', 'https://broker.example/#fragment', 'not a url', ''])('rejects unsafe URL %s with a positive control', (input) => {
     expect(normalizeBrokerUrl(input)).toBeNull();
     expect(normalizeBrokerUrl('https://broker.example/')).toBe('https://broker.example');

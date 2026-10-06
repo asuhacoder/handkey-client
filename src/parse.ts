@@ -125,6 +125,8 @@ export function normalizeBrokerUrl(value: string): string | null {
   try {
     const url = new URL(value);
     if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password || url.search || url.hash || (url.pathname !== '/' && url.pathname !== '')) return null;
+    // The device key travels in request bodies. Plaintext is allowed only where the broker's --dev mode can listen: numeric loopback.
+    if (url.protocol === 'http:' && !/^127(?:\.\d{1,3}){3}$/.test(url.hostname) && url.hostname !== '[::1]') return null;
     return url.origin;
   } catch { return null; }
 }
