@@ -109,7 +109,7 @@ Deny uses only the view token and sends no body. It continues on 200 and 409, an
 
 `consumeDeviceKey` accepts exactly 32 bytes encoded as 43 canonical unpadded base64url characters. It returns an opaque frozen object. String conversion, JSON serialization, and inspection show `[DeviceKey]`; own keys contain no credential. Secret bytes stay in a module-private WeakMap.
 
-Every key-taking method claims the key synchronously before checking guards. The key is spent even when a call is busy, not registered, has no IDs, or fails on the network. Reuse returns `key-spent` without making a fetch call. Claimed bytes are zeroed in `finally`. Raw keys are encoded only at the JSON body boundary. They never enter snapshots, results, thrown messages, faults, or persistence.
+Every key-taking method claims the key synchronously before checking guards. The key is spent even when a call is busy, not registered, has no IDs, or fails on the network. Reuse returns `key-spent` without making a fetch call. Claimed bytes are zeroed after the last key-bearing request, before any later view-only confirmation or cleanup. A `finally` cleanup also covers guard failures and unexpected exits. Raw keys are encoded only at the JSON body boundary. They never enter snapshots, results, thrown messages, faults, or persistence.
 
 JavaScript cannot guarantee erasure of the temporary input string or fetch buffers. The library is not a sandbox. The consumer controls its inputs, custom fetch implementation, and persistence. A consumer that logs fetch bodies can expose the key. The view token never appears in a snapshot or a result. It exists in the persisted record, in memory, and in Authorization headers inside the library.
 

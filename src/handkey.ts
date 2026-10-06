@@ -348,6 +348,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     const startedFrom = encoded;
     const previous = record;
     const reply = await broker.createSession({brokerUrl:target.brokerUrl,deviceId:input.deviceId,name:input.name,bytes});
+    bytes.fill(0);
     switch(reply.kind) {
      case 'unauthorized': return {kind:'rejected'};
      case 'conflict': return {kind:'session-limit'};
@@ -415,6 +416,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     const session = record; if (session === null) return {kind:'not-registered'};
     const captured = epoch;
     const reply = await broker.revoke({session,id,bytes});
+    bytes.fill(0);
     if (!current(captured)) return {kind:'session-ended'};
     switch(reply.kind) {
      case 'ok': return {kind:'ok'};
@@ -466,6 +468,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      }
      const reply = await broker.approve({session,id:item.id,bytes});
      const next = afterApprove(reply);
+     if(next.stop || !run.items.some(other=>other.id!==item.id && other.step.kind==='queued')) bytes.fill(0);
      let stop: StopReason | null = null;
      let outcome;
      switch(next.kind) {
