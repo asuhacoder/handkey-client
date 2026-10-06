@@ -1,4 +1,4 @@
-import { createHandkey } from '../src/index.js';
+import { createHandkey, remaining } from '../src/index.js';
 import type { RequestId } from '../src/index.js';
 import { browserEnvironment, takeKey, takeRegistration } from '../src/dom.js';
 import type { CredentialForm, RegistrationForm } from '../src/dom.js';
@@ -7,6 +7,10 @@ declare function useSyncExternalStore<T>(subscribe: (listener: () => void) => ()
 const client = createHandkey(browserEnvironment({ storageKey: 'handkey.session' }));
 export function useHandkey() {
  return useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
+}
+export function pendingSeconds(now = Date.now()) {
+ const snapshot = client.getSnapshot();
+ return snapshot.kind === 'active' ? snapshot.pending.map(request => remaining(request.deadline, now)) : [];
 }
 export async function register(form: RegistrationForm) {
  const input = takeRegistration(form);

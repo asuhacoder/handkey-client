@@ -16,7 +16,7 @@ Create one actor outside the component. `subscribe` starts its SSE feed. The las
 
 ```ts
 import { useSyncExternalStore } from 'react';
-import { createHandkey } from 'handkey-client';
+import { createHandkey, remaining } from 'handkey-client';
 import type { RequestId } from 'handkey-client';
 import { browserEnvironment, takeKey, takeRegistration } from 'handkey-client/dom';
 import type { CredentialForm, RegistrationForm } from 'handkey-client/dom';
@@ -24,6 +24,10 @@ import type { CredentialForm, RegistrationForm } from 'handkey-client/dom';
 const client = createHandkey(browserEnvironment({ storageKey: 'handkey.session' }));
 export function useHandkey() {
  return useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
+}
+export function pendingSeconds(now = Date.now()) {
+ const snapshot = client.getSnapshot();
+ return snapshot.kind === 'active' ? snapshot.pending.map(request => remaining(request.deadline, now)) : [];
 }
 export async function register(form: RegistrationForm) {
  const input = takeRegistration(form);
@@ -68,6 +72,8 @@ Memory persistence is isolated per instance. A custom `Persistence` stores an op
 ## Requests and snapshots
 
 The snapshot is either `register` or `active`. The registration snapshot has a closed reason and optional remembered broker URL and device ID. The active snapshot has the session identity, pending requests, unreadable entry count, list freshness, connection status, and current approval progress.
+
+`remaining(deadline, now)` accepts epoch milliseconds for `now`, including `Date.now()`. It returns whole nonnegative seconds and returns zero for a non-finite clock.
 
 Pending requests sort by deadline, then request ID. A subscribed actor removes expired requests using its clock without waiting for a network response. Malformed list entries increase `unreadable` without dropping the list.
 

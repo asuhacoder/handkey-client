@@ -48,8 +48,9 @@ export interface Request {
 export interface SessionSummary {
   readonly sessionId: SessionId; readonly name: string; readonly createdAt: Instant; readonly viewUntil: Instant; readonly current: boolean;
 }
-export function remaining(deadline: Instant, now: Instant): number {
-  return Math.max(0, Math.ceil((deadline - now) / 1000));
+/** Returns whole nonnegative seconds for an epoch-millisecond clock. Non-finite clocks return zero. */
+export function remaining(deadline: Instant, now: number): number {
+  return Number.isFinite(now) ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 0;
 }
 export function byDeadline(a: Request, b: Request): number {
   return a.deadline - b.deadline || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
