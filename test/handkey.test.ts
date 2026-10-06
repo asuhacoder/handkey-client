@@ -47,6 +47,7 @@ describe('approval broker status policy through the actor', () => {
   fake.queue(row.post === -1 ? new Error(`transport ${KEY} ${TOKEN}`) : row.post === -2 ? aborting : json({ status: 'processed' }, row.post));
   if (row.get !== 0) fake.queue(json(wireRequest('r1', row.approval, row.execution), row.get));
   if (row.stop === null) fake.queue(json({ status: 'processed' }), json(wireRequest('r2', 'approved', 'ready')));
+  if (row.stop !== 'session-ended') fake.queue(json([]));
   const credential = key();
   const pending = actor.approve([first, second], credential);
   expect(active(actor).approval?.items[0]?.step.kind).toBe('approving');
@@ -58,6 +59,7 @@ describe('approval broker status policy through the actor', () => {
   expect(fake.calls.map(call => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
    'POST /v1/requests/r1/approve', ...(row.get === 0 ? [] : ['GET /v1/requests/r1']),
    ...(row.stop === null ? ['POST /v1/requests/r2/approve', 'GET /v1/requests/r2'] : []),
+   ...(row.stop === 'session-ended' ? [] : ['GET /v1/requests']),
   ]);
   expect(await actor.approve([second], credential)).toEqual({ kind: 'key-spent' });
   expect(JSON.stringify([report, actor.getSnapshot(), persistence.read()])).not.toContain(KEY);
@@ -70,7 +72,7 @@ describe('approval broker status policy through the actor', () => {
  it('publishes sequential progress, refuses busy keys, deduplicates, and dismisses only finished progress', async () => {
   const { actor, fake } = setup();
   const post = deferred<Response>(), get = deferred<Response>();
-  fake.queue(() => post.promise, () => get.promise, json({ status: 'processed' }), json(wireRequest('r2', 'approved', 'ready')));
+  fake.queue(() => post.promise, () => get.promise, json({ status: 'processed' }), json(wireRequest('r2', 'approved', 'ready')), json([]));
   const one = request().id, two = request('r2').id;
   const run = actor.approve([one, one, two], key());
   const busyKey = key();
@@ -91,7 +93,7 @@ describe('approval broker status policy through the actor', () => {
   const { actor, fake } = setup();
   fake.queue(json([wireRequest('future', 'pending', 'not_started', NOW + 300_000, 'new-method'), wireRequest('r1')]));
   await actor.refresh();
-  fake.queue(json({ status: 'processed' }), json(wireRequest('r1', 'approved', 'ready')));
+  fake.queue(json({ status: 'processed' }), json(wireRequest('r1', 'approved', 'ready')), json([]));
   const report = await actor.approve([request('future').id, request().id], key());
   if (report.kind !== 'finished') throw new Error('Expected report');
   expect(report.items.map(item => item.outcome.kind)).toEqual(['not-sent', 'executed']);
@@ -168,7 +170,7 @@ describe('credential ownership and registration', () => {
 describe('view and key-only routes', () => {
  it('reads sessions and requests, denies without body, revokes siblings with a key, and signs out without one', async () => {
   const { actor, fake, persistence } = setup();
-  fake.queue(json(wireSessions()), json(wireRequest()), json({ status: 'denied' }), json({ status: 'revoked' }), new Error('offline'));
+  fake.queue(json(wireSessions()), json(wireRequest()), json({ status: 'denied' }), json([]), json({ status: 'revoked' }), new Error('offline'));
   const sessions = await actor.sessions();
   expect(sessions.kind).toBe('ok');
   if (sessions.kind !== 'ok') throw new Error('Expected sessions');
@@ -183,7 +185,7 @@ describe('view and key-only routes', () => {
   expect(persistence.read()).toBeNull();
   expect(fake.calls.map(call => [call.method, new URL(call.url).pathname, call.body, call.headers.get('Content-Type')])).toEqual([
    ['GET', '/v1/devices/device/sessions', undefined, null], ['GET', '/v1/requests/r1', undefined, null],
-   ['POST', '/v1/requests/r1/deny', undefined, null], ['POST', '/v1/sessions/sibling/revoke', JSON.stringify({ key: KEY }), 'application/json'],
+   ['POST', '/v1/requests/r1/deny', undefined, null], ['GET', '/v1/requests', undefined, null], ['POST', '/v1/sessions/sibling/revoke', JSON.stringify({ key: KEY }), 'application/json'],
    ['POST', '/v1/sessions/session/revoke', undefined, null],
   ]);
   for (const call of fake.calls) {
@@ -238,9 +240,15 @@ describe('view and key-only routes', () => {
  it.each([{ status: 200, outcome: 'denied', stop: null }, { status: 409, outcome: 'already-decided', stop: null }, { status: 401, outcome: 'session-ended', stop: 'session-ended' }, { status: 404, outcome: 'not-found', stop: 'not-found' }, { status: 503, outcome: 'interrupted', stop: 'interrupted' }])('deny $status is sequential and applies stop semantics', async row => {
   const { actor, fake } = setup(); fake.queue(json({ status: 'denied' }, row.status));
   if (row.stop === null) fake.queue(json({ status: 'denied' }));
+  if (row.stop !== 'session-ended') fake.queue(json([]));
   const report = await actor.deny([request().id, request().id, request('r2').id]);
   expect(report).toEqual({ kind: 'finished', items: [{ id: 'r1', outcome: { kind: row.outcome } }, { id: 'r2', outcome: { kind: row.stop === null ? 'denied' : 'not-sent' } }], stopped: row.stop });
-  expect(fake.calls.map(call => call.body)).toEqual(row.stop === null ? [undefined, undefined] : [undefined]);
+  expect(fake.calls.map(call => call.body)).toEqual(row.stop === null ? [undefined, undefined, undefined] : row.stop === 'session-ended' ? [undefined] : [undefined, undefined]);
+  expect(fake.calls.map(call => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
+   'POST /v1/requests/r1/deny',
+   ...(row.stop === null ? ['POST /v1/requests/r2/deny'] : []),
+   ...(row.stop === 'session-ended' ? [] : ['GET /v1/requests']),
+  ]);
  });
 });
 

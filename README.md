@@ -95,6 +95,8 @@ A batch sends approvals sequentially. It never retries a POST automatically. The
 
 Later items are `not-sent` after a stop. Duplicate IDs send once. Unrecognized methods are `not-sent` with `because: 'not-reviewable'`. `executed` appears only after a confirming GET, never from a successful POST alone.
 
+Finished approval and deny batches immediately remove requests known to be decided from `pending`, then trigger the same coalesced re-list as `refresh()`. Interrupted, key-rejected, authentication-undetermined, and not-sent requests stay pending unless the new list says otherwise. Reports resolve without waiting for the re-list. Session-ended batches do not re-list.
+
 Deny uses only the view token and sends no body. It continues on 200 and 409, and stops on 401, 404, or other failure. A 401 on any current view-token call clears the session and returns to registration. Key-only session list and revoke work without a registered view session. `revokeSibling` disambiguates a key-bearing 401 with a view-only session read.
 
 ## Key handling

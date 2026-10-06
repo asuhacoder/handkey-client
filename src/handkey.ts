@@ -108,6 +108,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  let registering = false;
  let attempt = 0;
  let connectedBefore = false;
+ const decidedIds = new Set<RequestId>();
 
  function publish(next: Snapshot): void {
   snapshot = Object.freeze(next);
@@ -161,7 +162,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   }, first.deadline - environment.now());
  }
  function adopt(next: SessionRecord, start = true): void {
-  ++epoch; stopFeed(); record = next; flight = null; dirty = false; attempt = 0; connectedBefore = false;
+  ++epoch; stopFeed(); record = next; flight = null; dirty = false; attempt = 0; connectedBefore = false; decidedIds.clear();
   if (next.viewUntil <= environment.now()) { end('expired', epoch); return; }
   publish({ kind: 'active', session: { brokerUrl: next.brokerUrl, deviceId: next.deviceId, sessionId: next.sessionId, viewUntil: next.viewUntil },
    pending: [], unreadable: 0, list: {kind:'loading'}, connection:'connecting', approval:null });
@@ -212,7 +213,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     if (controller.signal.aborted) return;
     if (!current(captured) || snapshot.kind !== 'active') return;
     if (result.kind === 'ok') {
-     const pending = result.value.requests.filter(request => request.deadline > environment.now());
+     const pending = result.value.requests.filter(request => request.deadline > environment.now() && !decidedIds.has(request.id));
      publish({...snapshot,pending,unreadable:result.value.unreadable,list:{kind:'fresh',checkedAt:toInstant(environment.now())}});
      armLocal();
     } else if (result.kind === 'failed' || result.kind === 'not-found') {
@@ -225,6 +226,15 @@ export function createHandkey(options: { persistence?: Persistence; environment?
    if (listAbort === controller) { listAbort = null; flight = null; }
   });
   return flight;
+ }
+ function reconcile(input: {captured: number; ids: readonly RequestId[]}): void {
+  if (!current(input.captured) || snapshot.kind !== 'active') return;
+  for (const id of input.ids) decidedIds.add(id);
+  if (input.ids.length > 0) {
+   publish({...snapshot,pending:snapshot.pending.filter(request=>!decidedIds.has(request.id))});
+   armLocal();
+  }
+  void refresh();
  }
  function down(captured: number): void {
   if (!current(captured) || listeners.size === 0 || snapshot.kind !== 'active') return;
@@ -452,7 +462,16 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      if (!current(captured)) stop='session-ended';
      if (stop !== null) {run=stopRun(run,stop);emit();break;}
     }
-    return reportOf(run);
+    const report = reportOf(run);
+     if (report.stopped !== 'session-ended') reconcile({captured,ids:report.items.filter(item=>{
+      switch(item.outcome.kind) {
+       case 'executed': case 'execution-failed': case 'already-decided': case 'not-found': return true;
+       case 'outcome-unknown': return item.outcome.request?.approval.kind === 'approved';
+       case 'interrupted': case 'key-rejected': case 'auth-undetermined': case 'session-ended': case 'not-sent': return false;
+       default: {const exhaustive:never=item.outcome;return exhaustive;}
+      }
+     }).map(item=>item.id)});
+     return report;
    } finally {bytes.fill(0);if (ownsBatch) batchBusy=false;}
   },
   dismissApproval() {if(snapshot.kind === 'active' && snapshot.approval?.kind === 'finished') publish({...snapshot,approval:null});},
@@ -474,7 +493,14 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      default:{const unreachable:never=reply;return unreachable;}
     }
    }
-   return {kind:'finished',items,stopped};
+   if (stopped !== 'session-ended') reconcile({captured,ids:items.filter(item=>{
+     switch(item.outcome.kind) {
+      case 'denied': case 'already-decided': case 'not-found': return true;
+      case 'interrupted': case 'session-ended': case 'not-sent': return false;
+      default: {const exhaustive:never=item.outcome;return exhaustive;}
+     }
+    }).map(item=>item.id)});
+    return {kind:'finished',items,stopped};
   },
  };
 }

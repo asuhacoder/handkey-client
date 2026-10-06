@@ -114,6 +114,7 @@ test('all key-taking routes keep credentials out of every public emission and re
   s.fake.queue(row.post === 200 ? json({ status: 'processed' }) : failure(row.post));
   if (row.get !== 0) s.fake.queue(row.get === 200 ? json(wireRequest('r1', row.approval, row.execution)) : failure(row.get));
   if (row.stop === null) s.fake.queue(json({ status: 'processed' }), json(wireRequest('r2', 'approved', 'ready')));
+  if (row.stop !== 'session-ended') s.fake.queue(json([]));
   const key = credential();
   const pending = observe(s.actor.approve([one, two], key));
   const progress = s.actor.getSnapshot();
@@ -128,6 +129,7 @@ test('all key-taking routes keep credentials out of every public emission and re
   expect(s.fake.calls.slice(1).map(call => [call.method, new URL(call.url).pathname])).toEqual([
    ['POST', '/v1/requests/r1/approve'], ...(row.get === 0 ? [] : [['GET', '/v1/requests/r1']]),
    ...(row.stop === null ? [['POST', '/v1/requests/r2/approve'], ['GET', '/v1/requests/r2']] : []),
+   ...(row.stop === 'session-ended' ? [] : [['GET', '/v1/requests']]),
   ]);
   if (row.stop === 'session-ended') {
    expect(s.actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: target });
@@ -224,7 +226,7 @@ test('all key-taking routes keep credentials out of every public emission and re
   expect(await observe(s.actor.approve([], empty))).toEqual({ kind: 'empty' });
   expect(await observe(s.actor.approve([], empty))).toEqual({ kind: 'key-spent' });
   const held = deferred<Response>();
-  s.fake.queue(() => held.promise, json(wireRequest('r1', 'approved', 'ready')));
+  s.fake.queue(() => held.promise, json(wireRequest('r1', 'approved', 'ready')), json([]));
   const pending = observe(s.actor.approve([one], credential()));
   const busy = credential(), registerBusy = credential();
   expect(await observe(s.actor.approve([two], busy))).toEqual({ kind: 'busy' });
