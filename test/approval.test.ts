@@ -113,38 +113,39 @@ describe('approval run', () => {
         { id: two.id, request: two, step: { kind: 'done', outcome: { kind: 'not-sent', because: 'not-reviewable' } } },
       ],
     });
+    expect(startRun([{ id: one.id, request: null }])).toEqual({ kind: 'finished', stopped: null, items: [{ id: one.id, request: null, step: { kind: 'done', outcome: { kind: 'not-sent', because: 'not-reviewable' } } }] });
     expect(startRun([])).toEqual({ kind: 'finished', items: [], stopped: null });
     expect(startRun([{ id: two.id, request: two }])).toEqual({ kind: 'finished', stopped: null, items: [{ id: two.id, request: two, step: { kind: 'done', outcome: { kind: 'not-sent', because: 'not-reviewable' } } }] });
   });
-  it('retains unknown requests and immutable progress until done', () => {
-    const id = request().id;
-    const initial = startRun([{ id, request: null }]);
+  it('retains reviewed requests and immutable progress until done', () => {
+    const value = request(), id = value.id;
+    const initial = startRun([{ id, request: value }]);
     const approving = withStep({ run: initial, id, step: { kind: 'approving', since: toInstant(10) } });
     const confirming = withStep({ run: approving, id, step: { kind: 'confirming', since: toInstant(20) } });
-    expect(initial).toEqual({ kind: 'running', stopped: null, items: [{ id, request: null, step: { kind: 'queued' } }] });
-    expect(approving).toEqual({ kind: 'running', stopped: null, items: [{ id, request: null, step: { kind: 'approving', since: 10 } }] });
-    expect(confirming).toEqual({ kind: 'running', stopped: null, items: [{ id, request: null, step: { kind: 'confirming', since: 20 } }] });
+    expect(initial).toEqual({ kind: 'running', stopped: null, items: [{ id, request: value, step: { kind: 'queued' } }] });
+    expect(approving).toEqual({ kind: 'running', stopped: null, items: [{ id, request: value, step: { kind: 'approving', since: 10 } }] });
+    expect(confirming).toEqual({ kind: 'running', stopped: null, items: [{ id, request: value, step: { kind: 'confirming', since: 20 } }] });
     const finished = withStep({ run: confirming, id, step: { kind: 'done', outcome: { kind: 'outcome-unknown', request: null } } });
-    expect(reportOf(finished)).toEqual({ kind: 'finished', stopped: null, items: [{ id, request: null, outcome: { kind: 'outcome-unknown', request: null } }] });
+    expect(reportOf(finished)).toEqual({ kind: 'finished', stopped: null, items: [{ id, request: value, outcome: { kind: 'outcome-unknown', request: null } }] });
     expect(withStep({ run: finished, id, step: { kind: 'queued' } })).toEqual(finished);
     expect(() => reportOf(initial)).toThrow('Approval run has unfinished items');
   });
   const reasons: readonly StopReason[] = ['key-rejected', 'session-ended', 'auth-undetermined', 'not-found', 'interrupted'];
   it.each(reasons)('%s settles queued items without changing earlier outcomes', reason => {
     const one = request('one'), two = request('two');
-    const initial = startRun([{ id: one.id, request: one }, { id: two.id, request: null }]);
+    const initial = startRun([{ id: one.id, request: one }, { id: two.id, request: two }]);
     const settled = withStep({ run: initial, id: one.id, step: { kind: 'done', outcome: { kind: 'already-decided', request: one } } });
     const stopped = stopRun(settled, reason);
     expect(reportOf(stopped)).toEqual({ kind: 'finished', stopped: reason, items: [
       { id: one.id, request: one, outcome: { kind: 'already-decided', request: one } },
-      { id: two.id, request: null, outcome: { kind: 'not-sent', because: 'batch-stopped' } },
+      { id: two.id, request: two, outcome: { kind: 'not-sent', because: 'batch-stopped' } },
     ] });
     expect(stopRun(stopped, 'interrupted')).toEqual(stopped);
   });
   it('does not claim an in-flight row was never sent', () => {
-    const id = request().id;
-    const active = withStep({ run: startRun([{ id, request: null }]), id, step: { kind: 'approving', since: toInstant(10) } });
-    expect(stopRun(active, 'interrupted')).toEqual({ kind: 'running', stopped: 'interrupted', items: [{ id, request: null, step: { kind: 'approving', since: 10 } }] });
+    const value = request(), id = value.id;
+    const active = withStep({ run: startRun([{ id, request: value }]), id, step: { kind: 'approving', since: toInstant(10) } });
+    expect(stopRun(active, 'interrupted')).toEqual({ kind: 'running', stopped: 'interrupted', items: [{ id, request: value, step: { kind: 'approving', since: 10 } }] });
   });
 });
 

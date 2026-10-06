@@ -40,7 +40,7 @@ export function startRun(input: readonly { readonly id: RequestId; readonly requ
     seen.add(item.id);
     items.push({
       ...item,
-      step: item.request?.operation.kind === 'unrecognized'
+      step: item.request === null || item.request.operation.kind === 'unrecognized'
         ? { kind: 'done', outcome: { kind: 'not-sent', because: 'not-reviewable' } }
         : { kind: 'queued' },
     });

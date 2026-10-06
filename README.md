@@ -99,7 +99,7 @@ A batch sends approvals sequentially. It never retries a POST automatically. The
 | 404 | None | `not-found` | Stop |
 | Other status, network failure, or timeout | GET request | Approved: use the 200 outcomes. Decided otherwise: `already-decided`. Pending or failed GET: `interrupted`. | Stop |
 
-Later items are `not-sent` after a stop. Duplicate IDs send once. Unrecognized methods are `not-sent` with `because: 'not-reviewable'`. `executed` appears only after a confirming GET, never from a successful POST alone.
+Later items are `not-sent` after a stop. Duplicate IDs send once. Unrecognized methods and IDs absent from the current parsed pending snapshot are `not-sent` with `because: 'not-reviewable'`. An inspected request alone is not sufficient for approval. A selection that leaves `pending` before submission needs a new review. `executed` appears only after a confirming GET, never from a successful POST alone.
 
 Finished approval and deny batches immediately remove requests known to be decided from `pending`, then trigger the same coalesced re-list as `refresh()`. Interrupted, key-rejected, authentication-undetermined, and not-sent requests stay pending unless the new list says otherwise. Reports resolve without waiting for the re-list. Session-ended batches do not re-list.
 

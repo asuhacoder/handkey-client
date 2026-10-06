@@ -479,7 +479,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      if (stop !== null) {run=stopRun(run,stop);emit();break;}
     }
     const report = reportOf(run);
-     if (report.stopped !== 'session-ended') reconcile({captured,ids:report.items.filter(item=>{
+     if (report.stopped !== 'session-ended' && report.items.some(item=>item.outcome.kind!=='not-sent')) reconcile({captured,ids:report.items.filter(item=>{
       switch(item.outcome.kind) {
        case 'executed': case 'execution-failed': case 'already-decided': case 'not-found': return true;
        case 'outcome-unknown': return item.outcome.request?.approval.kind === 'approved';

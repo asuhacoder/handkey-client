@@ -44,6 +44,8 @@ describe('approval broker status policy through the actor', () => {
  it.each(rows)('$label confirms execution and applies the batch stop rule', async row => {
   const { actor, fake, persistence } = setup();
   const first = request('r1').id, second = request('r2').id;
+  fake.queue(json([wireRequest('r1'), wireRequest('r2')]));
+  await actor.refresh();
   fake.queue(row.post === -1 ? new Error(`transport ${KEY} ${TOKEN}`) : row.post === -2 ? aborting : json({ status: 'processed' }, row.post));
   if (row.get !== 0) fake.queue(json(wireRequest('r1', row.approval, row.execution), row.get));
   if (row.stop === null) fake.queue(json({ status: 'processed' }), json(wireRequest('r2', 'approved', 'ready')));
@@ -57,7 +59,7 @@ describe('approval broker status policy through the actor', () => {
   expect(report.items.map(item => item.outcome.kind)).toEqual([row.outcome, row.stop === null ? 'executed' : 'not-sent']);
   expect(report.stopped).toBe(row.stop);
   expect(fake.calls.map(call => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
-   'POST /v1/requests/r1/approve', ...(row.get === 0 ? [] : ['GET /v1/requests/r1']),
+   'GET /v1/requests', 'POST /v1/requests/r1/approve', ...(row.get === 0 ? [] : ['GET /v1/requests/r1']),
    ...(row.stop === null ? ['POST /v1/requests/r2/approve', 'GET /v1/requests/r2'] : []),
    ...(row.stop === 'session-ended' ? [] : ['GET /v1/requests']),
   ]);
@@ -67,8 +69,8 @@ describe('approval broker status policy through the actor', () => {
   if (row.stop === 'session-ended') {
    expect(actor.getSnapshot()).toEqual({ kind: 'register', reason: 'rejected', remembered: { brokerUrl: URL_BASE, deviceId: 'device' }, approval: {
     kind: 'finished', stopped: 'session-ended', items: [
-     { id: first, request: null, step: { kind: 'done', outcome: { kind: 'session-ended', request: null } } },
-     { id: second, request: null, step: { kind: 'done', outcome: { kind: 'not-sent', because: 'batch-stopped' } } },
+     { id: first, request: request('r1'), step: { kind: 'done', outcome: { kind: 'session-ended', request: null } } },
+     { id: second, request: request('r2'), step: { kind: 'done', outcome: { kind: 'not-sent', because: 'batch-stopped' } } },
     ],
    } });
    expect(persistence.read()).toBeNull();
@@ -76,6 +78,8 @@ describe('approval broker status policy through the actor', () => {
  });
  it('publishes sequential progress, refuses busy keys, deduplicates, and dismisses only finished progress', async () => {
   const { actor, fake } = setup();
+  fake.queue(json([wireRequest('r1'), wireRequest('r2')]));
+  await actor.refresh();
   const post = deferred<Response>(), get = deferred<Response>();
   fake.queue(() => post.promise, () => get.promise, json({ status: 'processed' }), json(wireRequest('r2', 'approved', 'ready')), json([]));
   const one = request().id, two = request('r2').id;
