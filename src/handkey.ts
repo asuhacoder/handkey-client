@@ -492,6 +492,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      if (!current(captured) || cancelled()) stop='session-ended';
      if (stop !== null) {run=stopRun(run,stop);emit();break;}
     }
+    emit();
     const report = reportOf(run);
      if (report.stopped !== 'session-ended' && report.items.some(item=>item.outcome.kind!=='not-sent')) reconcile({captured,ids:report.items.filter(item=>{
       switch(item.outcome.kind) {
