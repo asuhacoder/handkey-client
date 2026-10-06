@@ -73,7 +73,7 @@ export async function readPending() {
 
 The checked version is in `usage-check/node.ts`. `pnpm typecheck` compiles this file and the root with `lib: ["ES2022"]`, without the DOM library. Node's platform declarations supply fetch and stream types.
 
-Memory persistence is isolated per instance. A custom `Persistence` stores an opaque versioned string through `read`, `compareAndSwap`, and optional `subscribe`. The saved record contains only the broker URL, device ID, session ID, view token, view expiry, and schema version. HTTP and HTTPS origins are accepted. Credentials, paths other than `/`, query strings, and fragments are rejected. Use HTTPS outside development.
+Memory persistence is isolated per instance. A custom `Persistence` stores an opaque versioned string through `read`, `compareAndSwap`, and optional `subscribe`. The saved record contains only the broker URL, device ID, session ID, view token, view expiry, and schema version. HTTPS origins are accepted. Plain HTTP is accepted only for numeric loopback addresses in `127.0.0.0/8` and `[::1]`. Credentials, paths other than `/`, query strings, and fragments are rejected. Use HTTPS outside development.
 
 ## Requests and snapshots
 
@@ -119,7 +119,7 @@ Expected failures resolve as closed result unions. `Fault.kind` is `network`, `t
 
 A `network` fault can mean a disconnected host, DNS failure, TLS failure, browser CORS denial, or a missing broker `--origins` entry for the page's origin. A browser cannot reliably distinguish these causes. The library does not run a no-cors probe.
 
-The feed re-lists after sync, change hints, reconnect, visibility regained, and explicit refresh. Concurrent hints coalesce into one active list with one trailing list. A 25-second heartbeat watchdog reconnects silent streams. Full-jitter exponential backoff starts at one second and caps at 30 seconds. While down, the actor polls every 60 seconds.
+The feed re-lists after sync, change hints, reconnect, visibility regained, and explicit refresh. Concurrent hints coalesce into one active list with one trailing list. A 25-second heartbeat watchdog reconnects silent streams. Full-jitter exponential backoff starts at one second and caps at 30 seconds. A successful stream open marks the connection live and cancels down polling, even without a sync frame. While down, the actor polls every 60 seconds.
 
 ## Known limits
 

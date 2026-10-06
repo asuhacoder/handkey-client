@@ -280,14 +280,14 @@ export function createHandkey(options: { persistence?: Persistence; environment?
    if (!current(captured) || listeners.size === 0 || controller.signal.aborted) return;
    if (result.kind === 'unauthorized') { end('rejected',captured); return; }
    if (result.kind !== 'ok') return;
+   liveSince=environment.now();clear(pollTimer);pollTimer=null;
+   if(snapshot.kind==='active')publish({...snapshot,connection:'live'});
    activity();
    await readEvents({stream:result.value,signal:controller.signal,onFrame(kind) {
     if (!current(captured) || listeners.size === 0) return;
     activity();
     switch (kind) {
      case 'sync':
-      liveSince ??= environment.now(); clear(pollTimer); pollTimer = null;
-      if (snapshot.kind === 'active') publish({...snapshot,connection:'live'});
       void refresh(); break;
      case 'change': void refresh(); break;
      case 'heartbeat': break;

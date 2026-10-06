@@ -408,7 +408,7 @@ describe('controlled SSE and feed lifecycle', () => {
   fake.queue(first.response, json([wireRequest('reconnected')]), second.response, json([wireRequest('after-sync')]));
   const off = actor.subscribe(() => {}); await flush();
   await fake.advance(24_000); first.push(': heartbeat\r\n\r\n'); await flush();
-  await fake.advance(24_999); expect(active(actor).connection).toBe('connecting');
+  await fake.advance(24_999); expect(active(actor).connection).toBe('live');
   await fake.advance(1); expect(active(actor).connection).toBe('retrying'); expect(first.cancelled).toBe(true);
   await fake.advance(999); expect(count(fake.calls, '/v1/events')).toBe(1);
   await fake.advance(1); expect(count(fake.calls, '/v1/events')).toBe(2);
