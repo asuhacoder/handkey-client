@@ -336,10 +336,10 @@ describe('actor epochs, persistence and deadlines', () => {
   const { actor, fake } = setup(); const stream = sse();
   fake.queue(stream.response, json([wireRequest('z', 'pending', 'not_started', NOW + 2000), wireRequest('b', 'pending', 'not_started', NOW + 1000), {}, wireRequest('a', 'pending', 'not_started', NOW + 1000), wireRequest('old', 'pending', 'not_started', NOW)]));
   const off = actor.subscribe(() => {}); await flush(); stream.push('event: sync\ndata: {}\n\n'); await flush();
-  expect(active(actor).pending.map(value => value.id)).toEqual(['a', 'b', 'z']);
+  expect(active(actor).pending.map(value => value.id)).toEqual(['old', 'a', 'b', 'z']);
   expect(active(actor).unreadable).toBe(1);
-  await fake.advance(1000); expect(active(actor).pending.map(value => value.id)).toEqual(['z']);
-  await fake.advance(1000); expect(active(actor).pending).toEqual([]);
+  await fake.advance(1000); expect(active(actor).pending.map(value => value.id)).toEqual(['old', 'z']);
+  await fake.advance(1000); expect(active(actor).pending.map(value => value.id)).toEqual(['old']);
   expect(count(fake.calls, '/v1/requests')).toBe(1);
   off(); await flush(); expect(fake.timers.size).toBe(0);
  });

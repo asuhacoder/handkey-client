@@ -81,7 +81,7 @@ The snapshot is either `register` or `active`. Both variants have `approval: App
 
 `remaining(deadline, now)` accepts epoch milliseconds for `now`, including `Date.now()`. It returns whole nonnegative seconds and returns zero for a non-finite clock.
 
-Pending requests sort by deadline, then request ID. A subscribed actor removes expired requests using its clock without waiting for a network response. Malformed list entries increase `unreadable` without dropping the list.
+Pending requests sort by deadline, then request ID. A successful broker list shows every readable pending entry. A subscribed actor prunes locally only when the deadline was later than the client clock at fetch time. An already-passed deadline may reflect clock skew, so the entry stays until a later list removes it. Malformed list entries increase `unreadable` without dropping the list.
 
 Operations, approval states, and execution states are discriminated unions. Unknown enum values become `unrecognized`. Broker execution `unknown` becomes `outcome-unknown`. Secret names require narrowing `verified`, `unverified`, or `legacy`; bindings refer to the joined secret reference. Cautions identify disclosure, unmasked output, persistent clipboard contents, unreviewable write values, unverified names, long leases, and multiple uses. Create-field values never enter the domain model.
 

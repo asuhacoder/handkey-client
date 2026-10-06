@@ -111,6 +111,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
  let attempt = 0;
  let connectedBefore = false;
  const decidedIds = new Set<RequestId>();
+ const localDeadlines = new Map<RequestId,number>();
 
  function publish(next: Snapshot): void {
   snapshot = Object.freeze(next);
@@ -158,15 +159,19 @@ export function createHandkey(options: { persistence?: Persistence; environment?
   if (listeners.size === 0 || record === null || snapshot.kind !== 'active') return;
   const captured = epoch;
   expiryTimer = schedule(() => { end('expired', captured); }, record.viewUntil - environment.now());
-  const first = snapshot.pending[0];
-  if (first !== undefined) deadlineTimer = schedule(() => {
+  const deadlines = snapshot.pending.flatMap(request=>{
+   const deadline=localDeadlines.get(request.id);return deadline===undefined?[]:[deadline];
+  });
+  if (deadlines.length > 0) deadlineTimer = schedule(() => {
    if (!current(captured) || snapshot.kind !== 'active') return;
-   publish({ ...snapshot, pending: snapshot.pending.filter(request => request.deadline > environment.now()) });
+   publish({ ...snapshot, pending: snapshot.pending.filter(request => {
+    const deadline=localDeadlines.get(request.id);return deadline===undefined || deadline>environment.now();
+   }) });
    armLocal();
-  }, first.deadline - environment.now());
+  }, Math.min(...deadlines) - environment.now());
  }
  function adopt(next: SessionRecord, start = true): void {
-  ++epoch; stopFeed(); record = next; flight = null; dirty = false; attempt = 0; connectedBefore = false; decidedIds.clear();
+  ++epoch; stopFeed(); record = next; flight = null; dirty = false; attempt = 0; connectedBefore = false; decidedIds.clear(); localDeadlines.clear();
   if (next.viewUntil <= environment.now()) { end('expired', epoch); return; }
   publish({ kind: 'active', session: { brokerUrl: next.brokerUrl, deviceId: next.deviceId, sessionId: next.sessionId, viewUntil: next.viewUntil },
    pending: [], unreadable: 0, list: {kind:'loading'}, connection:'connecting', approval:snapshot.approval });
@@ -217,7 +222,11 @@ export function createHandkey(options: { persistence?: Persistence; environment?
     if (controller.signal.aborted) return;
     if (!current(captured) || snapshot.kind !== 'active') return;
     if (result.kind === 'ok') {
-     const pending = result.value.requests.filter(request => request.deadline > environment.now() && !decidedIds.has(request.id));
+     const fetchedAt=environment.now();
+     const pending = result.value.requests.filter(request => !decidedIds.has(request.id));
+     localDeadlines.clear();
+     // Nonpositive observed lifetimes may mean clock skew. Only a later broker list removes those entries.
+     for(const request of pending) if(request.deadline>fetchedAt) localDeadlines.set(request.id,request.deadline);
      publish({...snapshot,pending,unreadable:result.value.unreadable,list:{kind:'fresh',checkedAt:toInstant(environment.now())}});
      armLocal();
     } else if (result.kind === 'failed' || result.kind === 'not-found') {
