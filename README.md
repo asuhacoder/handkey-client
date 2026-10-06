@@ -1,6 +1,6 @@
 # handkey-client
 
-A TypeScript approval client for the handkey broker. It targets the `v1` HTTP routes. The broker has no version header or version field. The library has no runtime dependencies and requires Node.js 22 or a browser with fetch and readable streams.
+A TypeScript approval client for the handkey broker. It targets the `v1` HTTP routes. The broker reports no API version, so `BROKER_API` is a statement of intent, not a negotiated value. The library has no runtime dependencies and requires Node.js 22 or a browser with fetch and readable streams.
 
 The root entry does not require DOM types. `handkey-client/dom` provides password-input helpers and browser persistence. The library has no React dependency.
 
@@ -103,7 +103,7 @@ Later items are `not-sent` after a stop. Duplicate IDs send once. Unrecognized m
 
 Finished approval and deny batches immediately remove requests known to be decided from `pending`, then trigger the same coalesced re-list as `refresh()`. Interrupted, key-rejected, authentication-undetermined, and not-sent requests stay pending unless the new list says otherwise. Reports resolve without waiting for the re-list. Session-ended batches do not re-list.
 
-Deny uses only the view token and sends no body. It continues on 200 and 409, and stops on 401, 404, or other failure. A 401 on any current view-token call clears the session and returns to registration. Key-only session list and revoke work without a registered view session. `revokeSibling` disambiguates a key-bearing 401 with a view-only session read.
+Deny uses only the view token and sends no body. It continues on 200 and 409, and stops on 401, 404, or other failure. A 401 on list, read, deny, events, or a confirming read clears the session and returns to registration. A 401 on the approve request itself does not clear it. The confirming read decides between a rejected key and an ended session. Key-only session list and revoke work without a registered view session. `revokeSibling` disambiguates a key-bearing 401 with a view-only session read.
 
 ## Key handling
 
@@ -111,7 +111,7 @@ Deny uses only the view token and sends no body. It continues on 200 and 409, an
 
 Every key-taking method claims the key synchronously before checking guards. The key is spent even when a call is busy, not registered, has no IDs, or fails on the network. Reuse returns `key-spent` without making a fetch call. Claimed bytes are zeroed in `finally`. Raw keys are encoded only at the JSON body boundary. They never enter snapshots, results, thrown messages, faults, or persistence.
 
-JavaScript cannot guarantee erasure of the temporary input string or fetch buffers. The library is not a sandbox. The consumer controls its inputs, custom fetch implementation, and persistence. A consumer that logs fetch bodies can expose the key. The view token appears only in persisted records and Authorization headers inside the library.
+JavaScript cannot guarantee erasure of the temporary input string or fetch buffers. The library is not a sandbox. The consumer controls its inputs, custom fetch implementation, and persistence. A consumer that logs fetch bodies can expose the key. The view token never appears in a snapshot or a result. It exists in the persisted record, in memory, and in Authorization headers inside the library.
 
 ## Faults and connection behavior
 
@@ -125,7 +125,7 @@ The feed re-lists after sync, change hints, reconnect, visibility regained, and 
 
 Each subscribed actor uses one SSE stream. Tabs do not share streams or batch progress. HTTP/1.1 browsers usually allow six concurrent connections per origin, so several tabs can exhaust that limit.
 
-Persistence compare-and-swap is atomic with respect to callers in the same JavaScript realm and best effort across tabs. A cross-process localStorage race can clear or overwrite a newer registration, requiring the user to register again. The view token grants only list, read, and deny access.
+Persistence compare-and-swap is atomic with respect to callers in the same JavaScript realm and best effort across tabs. A cross-process localStorage race can clear or overwrite a newer registration, requiring the user to register again. The view token cannot approve. It can list and read requests, deny them, read events, list the device's sessions, and end its own session.
 
 ## Development
 

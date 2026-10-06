@@ -53,7 +53,7 @@ export type Snapshot = {
 
 /** One session actor. Subscribe starts the feed. The last unsubscribe releases every timer and stream. */
 export interface Handkey {
- /** A bound external-store subscription. Listener exceptions do not escape. */
+ /** Listener exceptions are swallowed. */
  readonly subscribe: (listener: () => void) => () => void;
  /** A credential-free snapshot with stable identity between changes. */
  readonly getSnapshot: () => Snapshot;
@@ -69,7 +69,7 @@ export interface Handkey {
  sessions(): Promise<ReadResult<readonly SessionSummary[]>>;
  /** Revokes another session. A 401 is disambiguated through a view-only read. */
  revokeSibling(id: SessionId, key: DeviceKey): Promise<RevokeResult>;
- /** Best-effort self-revoke, then forget through compare-and-swap. */
+ /** Best-effort self-revoke, then forget the saved session. If another tab stored a newer record, that record is adopted instead. */
  signOut(): Promise<void>;
  /** Reads a request in any state. A view-token 401 ends this session. */
  inspect(id: RequestId): Promise<ReadResult<Request>>;
@@ -284,7 +284,7 @@ export function createHandkey(options: { persistence?: Persistence; environment?
      default: { const unreachable: never = kind; return unreachable; }
     }
    }});
-  })().catch(() => { /* Stream exceptions have no diagnostic channel. */ }).finally(() => {
+  })().catch(() => {}).finally(() => {
    if (stream !== controller) return;
    stream = null; clear(heartbeatTimer); heartbeatTimer = null;
    down(captured);

@@ -160,7 +160,7 @@ export async function readEvents(input: {
     return null;
   } finally {
     input.signal.removeEventListener('abort', cancel);
-    try { await reader.cancel(); } catch { /* A failed stream still releases its reader. */ }
+    try { await reader.cancel(); } catch {}
     reader.releaseLock();
   }
 }

@@ -1,10 +1,10 @@
-/** A versioned opaque record. CAS is atomic for callers in the same JS realm and best effort across tabs. */
+/** One opaque string. CAS is atomic for callers in the same JS realm and best effort across tabs. */
 export interface Persistence {
  read(): string | null;
  compareAndSwap(expected: string | null, next: string | null): boolean;
  subscribe?(callback: () => void): () => void;
 }
-/** All platform effects used by the actor. No DOM is required. */
+/** Platform effects injected into the actor. */
 export interface Environment {
  readonly fetch: typeof globalThis.fetch;
  now(): number;
@@ -16,7 +16,6 @@ export interface Environment {
   subscribe(callback: () => void): () => void;
  };
 }
-/** Creates an isolated memory record. Subscribers observe successful swaps. */
 export function memoryPersistence(): Persistence {
  let value: string | null = null;
  const listeners = new Set<() => void>();
@@ -38,6 +37,7 @@ export function defaultEnvironment(): Environment {
   fetch: globalThis.fetch.bind(globalThis),
   now: Date.now,
   random: Math.random,
+  // Platform timers hold a 32-bit delay; a longer one fires at once. Sessions last 90 days, so clamp and re-arm.
   setTimeout(callback, milliseconds) {
    const handle = {};
    const deadline = Date.now() + milliseconds;

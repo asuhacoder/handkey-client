@@ -10,7 +10,7 @@ const prototype = Object.freeze({
  [Symbol.for('nodejs.util.inspect.custom')]: () => '[DeviceKey]',
 });
 
-/** Accepts exactly 32 bytes in canonical unpadded base64url. The temporary string is not retained. */
+/** Returns null unless text is exactly 32 bytes of canonical unpadded base64url. */
 export function consumeDeviceKey(text: string): DeviceKey | null {
  if (!/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(text)) return null;
  const bytes = new Uint8Array(32);
@@ -37,7 +37,7 @@ export function claimKey(key: DeviceKey): Uint8Array | null {
  return bytes ?? null;
 }
 
-/** Internal JSON boundary. No key string leaves this function except inside the body. */
+/** The only place raw key bytes become a string. */
 export function keyBody(input: { bytes: Uint8Array; name?: string }): string {
  let encoded = '';
  let buffer = 0;
